@@ -1,0 +1,4 @@
+ORCA OCR
+========
+
+Python wrapper for Azure OCR services via REST API.
