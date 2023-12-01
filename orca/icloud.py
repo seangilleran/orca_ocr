@@ -1,22 +1,22 @@
 """TODO: File description."""
 import os
 import time
-from datetime import datetime
 from pathlib import Path
-from typing import Iterator, Optional
 
 from pyicloud import PyiCloudService
 from pyicloud.services.photos import PhotoAlbum, PhotoAsset
 
 
-def login(username='', password='') -> PyiCloudService:
-    """TODO: Description."""
+def login(username: str = '', password: str = '') -> PyiCloudService:
+    """
+    Login to iCloud and return an interface to the API. 2FA/2SA code adapted
+    from https://github.com/picklepete/pyicloud.
+    """
     if not username:
         username = os.environ['_ORCA_ICLOUD_USER']
     if not password:
         password = os.environ['_ORCA_ICLOUD_PASS']
 
-    # Attempt login. 2FA/2SA code adapted from https://github.com/picklepete/pyicloud.
     print(f"Logging in ({username})...")
     api = PyiCloudService(username, password)
 
@@ -57,21 +57,12 @@ def login(username='', password='') -> PyiCloudService:
     return api
 
 
-def get_photos_by_date(
-    album: PhotoAlbum, end_date: datetime, start_date: Optional[datetime] = None
-) -> Iterator[PhotoAsset]:
-    """TODO: Description."""
-    for photo in album:
-        if start_date is None or start_date < photo.created <= end_date:
-            yield photo
-
-
-def heic_to_png(heic_filename: str, delete_old: bool = False) -> str:
+def heic_to_png(heic_file: Path, delete_old: bool = False) -> Path:
     """TODO: Description."""
     import pyheif
     from PIL import Image
 
-    heif = pyheif.read(heic_filename)
+    heif = pyheif.read(heic_file.as_posix())
     img = Image.frombytes(
         heif.mode,
         heif.size,
@@ -81,66 +72,72 @@ def heic_to_png(heic_filename: str, delete_old: bool = False) -> str:
         heif.stride,
     )
 
-    png_filename = f"{heic_filename[:-5]}.png"
-    img.save(png_filename)
-
+    png_file = heic_file.with_suffix('.png')
+    img.save(png_file.as_posix())
     if delete_old:
-        os.remove(heic_filename)
+        heic_file.unlink()
 
-    return png_filename
+    return png_file
 
 
-def download_photo(photo: PhotoAsset, path: str) -> bool:
+def download_album(album: PhotoAlbum, path: Path) -> None:
     """TODO: Description."""
-    ts = photo.created.strftime('%Y-%m-%d_%H-%M-%S')
-    img_file = Path(path) / f"{ts}_{photo.filename}"
+    count = len(album)
+    print(f"Downloading {count} photos from {album.name}...")
+    for i, photo in enumerate(album):
+        # Add the created-on date to the filename in order to help us sort
+        # images in the order they were taken.
+        timestamp = photo.created.strftime('%Y-%m-%d_%H-%M-%S')
+        img_file = Path(path) / f"{timestamp}_{photo.filename}"
 
-    if img_file.exists() or img_file.with_suffix('.png').exists():
-        return False
+        # Skip the photo if it's already been downloaded. Use the new filename!
+        if img_file.exists() or img_file.with_suffix('.png').exists():
+            print(f"  Skipping {photo.filename} ({i}/{count})")
+            continue
 
-    download = photo.download()
-    with img_file.open('wb') as f:
-        for chunk in download.iter_content(chunk_size=1024 * 1024):
-            if chunk:
-                f.write(chunk)
+        # Buffer the download so we don't have to keep the whole thing in RAM.
+        print(f"  Downloading {photo.filename} ({i}/{count})")
+        download = photo.download()
+        with img_file.open('wb') as f:
+            for chunk in download.iter_content(chunk_size=1024 * 1024):
+                if chunk:
+                    f.write(chunk)
 
-    # Convert from HEIC if necessary.
-    if img_file.suffix.lower() == '.heic':
-        img_file = Path(heic_to_png(img_file.as_posix(), delete_old=True))
+        # Azure can't work with HEIC so we'll need to convert.
+        if img_file.suffix.lower() == '.heic':
+            img_file = heic_to_png(img_file, delete_old=True)
 
-    # Overwrite filesystem timestamp with iCloud's "created on" property.
-    timestamp = time.mktime(photo.created.timetuple())
-    os.utime(img_file, (timestamp, timestamp))
+        # Overwrite filesystem timestamp with iCloud's "created on" property,
+        # just as another way to help sort them if necessary.
+        timestamp = time.mktime(photo.created.timetuple())
+        os.utime(img_file, (timestamp, timestamp))
 
-    return True
+    print('Done!')
 
 
 if __name__ == '__main__':
-    print('Logging in...')
+    import argparse
+    from dateutil.parser import parse
+    from dotenv import load_dotenv
+
+    load_dotenv()
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('albums', nargs='+', help='List of album titles')
+    args = parser.parse_args()
+
     api = login()
 
-    print('Downloading photos ...')
-    albums = [
-        ('2023-02', 'February 2023'),
-        ('2023-03', 'March 2023'),
-        ('2023-04', 'April 2023'),
-        ('2023-05', 'May 2023'),
-        ('2023-06', 'June 2023'),
-        ('2023-01', 'January 2023'),
-    ]
-    for i, album_info in enumerate(albums):
-        album_path, album_name = album_info
-        download_path = Path('data') / album_path
+    for i, album in enumerate(args.albums):
+        # Kludge: If the title is a month/year combo, use a simplified path.
+        album_folder = album
+        try:
+            album_folder = parse(album).strftime('%Y-%m')
+        except:
+            pass
+        download_path = Path('data') / album_folder
         download_path.mkdir(parents=True, exist_ok=True)
 
-        album = api.photos.albums[album_name]
-        count = len(album)
-
-        for x, photo in enumerate(album):
-            
-            if download_photo(photo, download_path):
-                print(f"  Downloading {photo.filename} ({album_name} {x + 1}/{count})")
-            else:
-                print(f"  Skipping {photo.filename} ({album_name} {x + 1}/{count})")
+        download_album(api.photos.albums[album])
 
     print('Done!')
