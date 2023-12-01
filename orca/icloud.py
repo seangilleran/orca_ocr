@@ -23,6 +23,11 @@ def login(username: str = '', password: str = '') -> PyiCloudService:
     if api.requires_2fa:
         print('Two-factor authentication required.')
         code = input('Enter the code you received on one of your approved devices: ')
+
+        if code.lower()[0] == 'q' or code.lower()[0] == 'x':
+            print('Exiting.')
+            exit(0)
+
         result = api.validate_2fa_code(code)
         print(f"Code validation result: {result}")
 
