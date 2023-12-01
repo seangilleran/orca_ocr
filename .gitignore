@@ -4,12 +4,11 @@ __pycache__/
 *$py.class
 
 # Platform-specific files
-./.venv/
-./.vscode/
-./bin/
+.venv/
+.vscode/
+bin/
 
 # Data
-./data
-./data_l/
-./.env
-./logs/
+data
+.env
+logs/
