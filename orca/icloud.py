@@ -123,7 +123,13 @@ if __name__ == '__main__':
     load_dotenv()
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('albums', nargs='+', help='List of album titles')
+    parser.add_argument(
+        'albums',
+        metavar='album',
+        type=str,
+        nargs='*',
+        help='album titles separated by spaces',
+    )
     args = parser.parse_args()
 
     api = login()
