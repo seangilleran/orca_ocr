@@ -1,80 +1,156 @@
-"""TODO: File description."""
+"""
+OCR with Azure Computer Vision
+by Sean Gilleran (sean@wgws.dev)
+December 2023
+
+This module provides functionality for performing Optical Character Recognition
+(OCR) on image files using Azure Computer Vision API. It is designed to interact
+with Azure's Computer Vision service to extract text from various image formats.
+
+The module contains functions to send image files to Azure Computer Vision and
+retrieve the OCR results. The primary function, `analyze_image`, manages the
+process of sending the image to the Azure service. Azure Computer Vision API
+keys and endpoint should be set as environment variables for the script to
+function correctly.
+
+Functions:
+    analyze_image(img_file: Path, img_type: str) -> dict:
+        Analyzes an image file for text content using Azure Computer Vision.
+        Returns a dictionary containing the OCR results.
+
+Usage:
+    When used as a standalone script:
+        - Configure Azure credentials as environment variables.
+        - Run the script and it will log its process to the console.
+    When imported as a module:
+        - Call the `analyze_image` function with an image file path.
+"""
 import json
+import logging
 import os
-import time
 from pathlib import Path
 
 
-def analyze_image(path: str, img_type='png') -> dict:
-    """TODO: Description."""
+log = logging.getLogger(__name__)
+
+
+def get_img_type(file_path: str | Path) -> str:
+    """
+    Verify file exists, is a file, and is a supported image type.
+
+    Parameters:
+    file_path (str or Path): Path to the file.
+
+    Returns:
+    str: Image content-type string.
+    """
+    file_path = Path(file_path)
+    if not file_path.exists() or not file_path.is_file():
+        return
+    ext = file_path.suffix.lower()
+
+    if ext == '.bmp':
+        return 'bmp'
+    if ext == '.gif':
+        return 'gif'
+    if ext == '.ico':
+        return 'ico'
+    if ext == '.jpg' or ext == '.jpeg':
+        return 'jpeg'
+    if ext == '.mpo':
+        return 'mpo'
+    if ext == '.png':
+        return 'png'
+    if ext == '.tif' or ext == '.tiff':
+        return 'tiff'
+    if ext == '.webp':
+        return 'webp'
+    return
+
+
+def analyze_image(
+    img_file: str | Path, max_retries: int = 3, retry_delay: float = 5.0
+) -> dict:
+    """
+    Send image file to Azure Computer Vision for OCR.
+    API reference: https://eastus.dev.cognitive.microsoft.com/docs/services/unified-vision-apis-public-preview-2023-04-01-preview/operations/61d65934cd35050c20f73ab6
+
+    Parameters:
+    img_file (str or Path): Path to the image file.
+    max_retries (int): Retries to attempt after failed request.
+    retry_delay (float): Seconds to wait between retries.
+
+    Returns:
+    dict: Image analysis results.
+    """
+    import time
     import requests
 
-    uri = '{endpoint}/computervision/imageanalysis:analyze'.format(
-        endpoint=os.environ['_ORCA_VISION_ENDPOINT'],
-    )
-    headers = {
-        'Content-Type': f"image/{img_type}",
-        'Ocp-Apim-Subscription-Key': os.environ['_ORCA_VISION_KEY'],
-    }
+    img_file = Path(img_file)
+    img_type = get_img_type(img_file)
+    if not img_type:
+        return
+    with img_file.open('rb') as f:
+        image = f.read()
+
+    uri = os.environ['_ORCA_VISION_ENDPOINT'] + '/computervision/imageanalysis:analyze'
     params = {
         'api-version': os.environ['_ORCA_VISION_API_VERSION'],
         'features': 'read',
     }
-    with open(path, 'rb') as f:
-        image = f.read()
+    headers = {
+        'Content-Type': 'application/octet-stream',
+        'Ocp-Apim-Subscription-Key': os.environ['_ORCA_VISION_KEY'],
+    }
 
-    # POST image; collect result URI.
-    max_retries = 3
-    retry_delay = 60
     for attempt in range(max_retries):
-        try:
-            response = requests.post(uri, headers=headers, params=params, data=image)
-            response.raise_for_status()
+        response = requests.post(uri, headers=headers, params=params, data=image)
+        status = response.status_code
+        if attempt <= max_retries and status != 200:
+            log.warn('Failed with code %i, retrying in %fs...' % (status, retry_delay))
+            time.sleep(retry_delay)
+        elif status == 200:
             break
-        except requests.exceptions.HTTPError as e:
-            if attempt <= max_retries:
-                print(f"  Connection error, retrying in {retry_delay} seconds...")
-                with open('error.json', 'w') as f:
-                    json.dump(response.json(), f, indent=4)
-                time.sleep(retry_delay)
-            else:
-                print(f"Max retries exceeded, connection failed, exiting.")
-                exit(1)
-        except requests.exceptions.RequestException:
-            raise
+        else:
+            log.error('Skipping %s, could not process.' % img_file.name)
+            return {}
 
-    data = response.json()
-    return data
-
-
-def get_text(data: dict) -> str:
-    """TODO: Description."""
-    from unidecode import unidecode
-
-    metatext = 'test'
-    text = unidecode(data['analyzeResult']['content'])
-
-    return text, metatext
+    return response.json()
 
 
 if __name__ == '__main__':
+    import argparse
+    from dotenv import load_dotenv
     from natsort import natsorted
 
-    for path in [Path('data/2023-01')]:
-        print(f"Sending {path} to Azure Vision...")
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+    )
+
+    load_dotenv()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('paths', nargs='+', help='List of file paths')
+    args = parser.parse_args()
+
+    for path in [Path(p) for p in args.paths]:
+        log.info('Sending %s to Azure Vision...' % path)
         out_path = path / os.environ['_ORCA_VISION_MODEL']
         out_path.mkdir(parents=True, exist_ok=True)
 
-        img_files = natsorted(list(path.glob('*.png')))
+        img_files = [f for f in path.iterdir() if get_img_type(f)]
+        img_files = natsorted(img_files)
         for i, img_file in enumerate(img_files):
             json_file = out_path / f"{img_file.stem}.json"
+
+            # Skip files we already have data for.
             if json_file.exists():
-                print(f"  Skipping {json_file} ...")
+                log.info('Skipping %s, already processed.' % img_file.name)
                 continue
 
-            print(f"  {img_file} ({i + 1}/{len(img_files)})")
-            data = analyze_image(img_file.as_posix(), img_type='png')
-
-            with open(json_file, 'w') as f:
+            log.info('%s (%i/%i)...' % (img_file.name, i + 1, len(img_files)))
+            data = analyze_image(img_file)
+            with json_file.open('w') as f:
                 json.dump(data, f, indent=4)
-        print('Done!')
+
+        log.info('Done! Finished processing images in %s.' % path)
