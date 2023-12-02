@@ -1,4 +1,6 @@
-ORCA OCR
+OCR with Azure Computer Vision
+by Sean Gilleran (sean@wgws.dev)
+December 2023
 ========
 
 Python wrapper for Azure OCR services via REST API.
