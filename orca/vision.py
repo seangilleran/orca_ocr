@@ -83,7 +83,7 @@ def analyze_image(
 
     Returns:
         dict: Image analysis results.
-    
+
     API reference: https://eastus.dev.cognitive.microsoft.com/docs/services/unified-vision-apis-public-preview-2023-04-01-preview/operations/61d65934cd35050c20f73ab6
     """
     img_file = Path(img_file)
@@ -107,12 +107,12 @@ def analyze_image(
         response = requests.post(uri, headers=headers, params=params, data=image)
         status = response.status_code
         if attempt <= max_retries and status != 200:
-            log.warn('Failed with code %d, retrying in %fs...' % (status, retry_delay))
+            log.warning('Failed (%d), retrying in %ds...' % (status, retry_delay))
             time.sleep(retry_delay)
         elif status == 200:
             break
         else:
-            log.error('Skipping %s, could not process.' % img_file.name)
+            log.error('Skipping %s, error.' % img_file)
             return {}
 
     return response.json()
@@ -133,7 +133,12 @@ if __name__ == '__main__':
     parser.add_argument('paths', nargs='+', help='List of file paths')
     args = parser.parse_args()
 
-    for path in [Path(p) for p in args.paths]:
+    # Kludge: nohup includes the name of the file as one of the arguments (?)
+    paths = args.paths
+    if 'vision.py' in args.paths[0]:
+        paths = args.paths[1:]
+
+    for path in [Path(p) for p in paths]:
         log.info('Sending %s to Azure Vision...' % path)
         out_path = path / os.environ['_ORCA_VISION_MODEL']
         out_path.mkdir(parents=True, exist_ok=True)
@@ -146,13 +151,10 @@ if __name__ == '__main__':
 
             # Skip files we already have data for.
             if json_file.exists():
-                log.info(
-                    'Skipping %s (%d/%d), already processed.'
-                    % (img_file.name, i + 1, count)
-                )
+                log.info('Skipping %s (%d/%d), processed.' % (img_file, i + 1, count))
                 continue
 
-            log.info('%s (%d/%d)...' % (img_file.name, i + 1, count))
+            log.info('%s (%d/%d)...' % (img_file, i + 1, count))
             data = analyze_image(img_file)
             with json_file.open('w') as f:
                 json.dump(data, f, indent=4)
