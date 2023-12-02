@@ -12,3 +12,4 @@ bin/
 data
 .env
 logs/
+*.out
