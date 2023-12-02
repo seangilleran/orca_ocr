@@ -71,7 +71,7 @@ def get_img_type(file_path: str | Path) -> str:
 
 
 def analyze_image(
-    img_file: str | Path, max_retries: int = 3, retry_delay: float = 5.0
+    img_file: str | Path, max_retries: int = 0, retry_delay: float = 5.0
 ) -> dict:
     """
     Send image file to Azure Computer Vision for OCR.
@@ -103,11 +103,13 @@ def analyze_image(
         'Ocp-Apim-Subscription-Key': os.environ['_ORCA_VISION_KEY'],
     }
 
-    for attempt in range(max_retries):
+    attempt = 0
+    while(max_retries == 0 or attempt < max_retries):
         response = requests.post(uri, headers=headers, params=params, data=image)
         status = response.status_code
-        if attempt <= max_retries and status != 200:
+        if attempt < max_retries and status != 200:
             log.warning('Failed (%d), retrying in %ds...' % (status, retry_delay))
+            attempt += 1
             time.sleep(retry_delay)
         elif status == 200:
             break
