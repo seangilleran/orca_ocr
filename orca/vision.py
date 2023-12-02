@@ -104,20 +104,20 @@ def analyze_image(
     }
 
     attempt = 0
-    while(max_retries == 0 or attempt < max_retries):
+    while(attempt == 0 or attempt < max_retries):
         response = requests.post(uri, headers=headers, params=params, data=image)
         status = response.status_code
         if attempt < max_retries and status != 200:
             log.warning('Failed (%d), retrying in %ds...' % (status, retry_delay))
             attempt += 1
             time.sleep(retry_delay)
-        elif status == 200:
-            break
         else:
-            log.error('Skipping %s, error.' % img_file)
-            return {}
+            break
 
-    return response.json()
+    try:
+        return response.json()
+    except requests.exceptions.JSONDecodeError:
+        return {}
 
 
 if __name__ == '__main__':
