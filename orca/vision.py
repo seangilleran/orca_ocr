@@ -41,10 +41,10 @@ def get_img_type(file_path: str | Path) -> str:
     Verify file exists, is a file, and is a supported image type.
 
     Parameters:
-    file_path (str or Path): Path to the file.
+        file_path (str or Path): Path to the file.
 
     Returns:
-    str: Image content-type string.
+        str: Image content-type string.
     """
     file_path = Path(file_path)
     if not file_path.exists() or not file_path.is_file():
@@ -75,15 +75,16 @@ def analyze_image(
 ) -> dict:
     """
     Send image file to Azure Computer Vision for OCR.
-    API reference: https://eastus.dev.cognitive.microsoft.com/docs/services/unified-vision-apis-public-preview-2023-04-01-preview/operations/61d65934cd35050c20f73ab6
 
     Parameters:
-    img_file (str or Path): Path to the image file.
-    max_retries (int): Retries to attempt after failed request.
-    retry_delay (float): Seconds to wait between retries.
+        img_file (str or Path): Path to the image file.
+        max_retries (int): Retries to attempt after failed request.
+        retry_delay (float): Seconds to wait between retries.
 
     Returns:
-    dict: Image analysis results.
+        dict: Image analysis results.
+    
+    API reference: https://eastus.dev.cognitive.microsoft.com/docs/services/unified-vision-apis-public-preview-2023-04-01-preview/operations/61d65934cd35050c20f73ab6
     """
     img_file = Path(img_file)
     img_type = get_img_type(img_file)
@@ -138,16 +139,20 @@ if __name__ == '__main__':
         out_path.mkdir(parents=True, exist_ok=True)
 
         img_files = [f for f in path.iterdir() if get_img_type(f)]
+        count = len(img_files)
         img_files = natsorted(img_files)
         for i, img_file in enumerate(img_files):
             json_file = out_path / f"{img_file.stem}.json"
 
             # Skip files we already have data for.
             if json_file.exists():
-                log.info('Skipping %s, already processed.' % img_file.name)
+                log.info(
+                    'Skipping %s (%d/%d), already processed.'
+                    % (img_file.name, i + 1, count)
+                )
                 continue
 
-            log.info('%s (%d/%d)...' % (img_file.name, i + 1, len(img_files)))
+            log.info('%s (%d/%d)...' % (img_file.name, i + 1, count))
             data = analyze_image(img_file)
             with json_file.open('w') as f:
                 json.dump(data, f, indent=4)
