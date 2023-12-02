@@ -106,7 +106,7 @@ def analyze_image(
         response = requests.post(uri, headers=headers, params=params, data=image)
         status = response.status_code
         if attempt <= max_retries and status != 200:
-            log.warn('Failed with code %i, retrying in %fs...' % (status, retry_delay))
+            log.warn('Failed with code %d, retrying in %fs...' % (status, retry_delay))
             time.sleep(retry_delay)
         elif status == 200:
             break
@@ -147,7 +147,7 @@ if __name__ == '__main__':
                 log.info('Skipping %s, already processed.' % img_file.name)
                 continue
 
-            log.info('%s (%i/%i)...' % (img_file.name, i + 1, len(img_files)))
+            log.info('%s (%d/%d)...' % (img_file.name, i + 1, len(img_files)))
             data = analyze_image(img_file)
             with json_file.open('w') as f:
                 json.dump(data, f, indent=4)
