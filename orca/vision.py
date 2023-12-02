@@ -28,7 +28,10 @@ Usage:
 import json
 import logging
 import os
+import time
 from pathlib import Path
+
+import requests
 
 log = logging.getLogger(__name__)
 
@@ -82,9 +85,6 @@ def analyze_image(
     Returns:
     dict: Image analysis results.
     """
-    import time
-    import requests
-
     img_file = Path(img_file)
     img_type = get_img_type(img_file)
     if not img_type:
