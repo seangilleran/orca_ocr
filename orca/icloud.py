@@ -133,13 +133,20 @@ def heic_to_png(heic_file: str | Path, delete_old: bool = False) -> str:
     return png_file.as_posix()
 
 
-def download_album(download_path: str | Path, album: PhotoAlbum):
+def download_album(
+    download_path: str | Path,
+    album: PhotoAlbum,
+    max_retries: int = 3,
+    retry_delay: float = 60.0,
+):
     """
     Download photos from an album and save them to the specified path.
 
     Parameters:
         path (str or Path): Directory path to save downloaded photos.
         album (PhotoAlbum): PhotoAlbum object containing the album to download.
+        max_retries (int): Retries to attempt after failed request.
+        retry_delay (float): Seconds to wait between retries.
 
     This function iterates through the photos in the specified album and
     downloads them to the provided path. It checks whether each photo has
@@ -151,6 +158,8 @@ def download_album(download_path: str | Path, album: PhotoAlbum):
     timestamps are also adjusted to reflect the "created on" property from
     iCloud, providing an additional way to sort the photos.
     """
+    from pyicloud.exceptions import PyiCloudAPIResponseException
+
     download_path = Path(download_path)
     count = len(album)
     dl_count = 0
@@ -166,14 +175,28 @@ def download_album(download_path: str | Path, album: PhotoAlbum):
         # have changed the filename during processing!
         if img_file.exists() or img_file.with_suffix('.png').exists():
             log.warn(
-                'Skipping %s (%d/%d), image already downloaded.'
-                % (photo.filename, i + 1, count)
+                'Skipping %s from %s (%d/%d), image already downloaded.'
+                % (photo.filename, album.name, i + 1, count)
             )
             continue
 
+        log.info('%s from %s (%d/%d)' % (photo.filename, album.name, i + 1, count))
+        attempt = 0
+        while attempt == 0 or attempt < max_retries:
+            try:
+                download = photo.download()
+                break
+            except PyiCloudAPIResponseException:
+                log.error('Failed with code 503.')
+                if attempt < max_retries:
+                    log.info(
+                        'Retrying in %d seconds (%d/%d)...'
+                        % (retry_delay, attempt + 1, max_retries)
+                    )
+                    attempt += 1
+                    time.sleep(retry_delay)
+
         # Buffer the download so we don't have to keep the whole thing in RAM.
-        log.info('%s (%d/%d)' % (photo.filename, i + 1, count))
-        download = photo.download()
         with img_file.open('wb') as f:
             for chunk in download.iter_content(chunk_size=1024 * 1024):
                 if chunk:
