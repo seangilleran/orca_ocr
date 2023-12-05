@@ -132,7 +132,7 @@ def analyze_images(
     out_path.mkdir(parents=True, exist_ok=True)
 
     log.info('Sending %s to Azure Vision...' % in_path)
-    img_files = natsorted([f for f in in_path.iterdir() if get_img_type(f) is not None])
+    img_files = natsorted([f for f in in_path.iterdir() if get_img_type(f)])
     count = len(img_files)
     for i, img_file in enumerate(img_files):
         json_file = out_path / f"{img_file.stem}.json"
