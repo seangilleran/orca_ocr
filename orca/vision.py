@@ -104,7 +104,7 @@ def analyze_image(
     }
 
     attempt = 0
-    while(attempt == 0 or attempt < max_retries):
+    while attempt == 0 or attempt < max_retries:
         response = requests.post(uri, headers=headers, params=params, data=image)
         status = response.status_code
         if attempt < max_retries and status != 200:
@@ -118,6 +118,36 @@ def analyze_image(
         return response.json()
     except requests.exceptions.JSONDecodeError:
         return {}
+
+
+def analyze_images(
+    in_path: str | Path,
+    out_path: str | Path,
+    max_retries: int = 0,
+    retry_delay: float = 5.0,
+):
+    """TODO: Description."""
+    in_path = Path(in_path)
+    out_path = Path(out_path)
+    out_path.mkdir(parents=True, exist_ok=True)
+
+    log.info('Sending %s to Azure Vision...' % in_path)
+    img_files = natsorted([f for f in in_path.iterdir() if get_img_type(f) is not None])
+    count = len(img_files)
+    for i, img_file in enumerate(img_files):
+        json_file = out_path / f"{img_file.stem}.json"
+
+        # Skip files we already have data for.
+        if json_file.exists():
+            log.info('Skipping %s (%d/%d), processed.' % (img_file, i + 1, count))
+            continue
+
+        log.info('%s (%d/%d)...' % (img_file, i + 1, count))
+        data = analyze_image(img_file, max_retries, retry_delay)
+        with json_file.open('w') as f:
+            json.dump(data, f, indent=4)
+
+    log.info('Done! Finished processing images in %s.' % in_path)
 
 
 if __name__ == '__main__':
@@ -140,25 +170,6 @@ if __name__ == '__main__':
     if 'vision.py' in args.paths[0]:
         paths = args.paths[1:]
 
-    for path in [Path(p) for p in paths]:
-        log.info('Sending %s to Azure Vision...' % path)
-        out_path = path / os.environ['_ORCA_VISION_MODEL']
-        out_path.mkdir(parents=True, exist_ok=True)
-
-        img_files = [f for f in path.iterdir() if get_img_type(f)]
-        count = len(img_files)
-        img_files = natsorted(img_files)
-        for i, img_file in enumerate(img_files):
-            json_file = out_path / f"{img_file.stem}.json"
-
-            # Skip files we already have data for.
-            if json_file.exists():
-                log.info('Skipping %s (%d/%d), processed.' % (img_file, i + 1, count))
-                continue
-
-            log.info('%s (%d/%d)...' % (img_file, i + 1, count))
-            data = analyze_image(img_file)
-            with json_file.open('w') as f:
-                json.dump(data, f, indent=4)
-
-        log.info('Done! Finished processing images in %s.' % path)
+    for in_path in [Path(p) for p in paths]:
+        out_path = in_path / os.environ['_ORCA_VISION_MODEL']
+        analyze_images(in_path, out_path)
