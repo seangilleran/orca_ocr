@@ -34,8 +34,8 @@ def login(username: str = '', password: str = '') -> PyiCloudService:
     variables `_ORCA_ICLOUD_USER` and `_ORCA_ICLOUD_PASS`.
 
     Parameters:
-        username (str): iCloud username.
-        password (str): iCloud password.
+        username (str, optional): iCloud username.
+        password (str, optional): iCloud password.
 
     Returns:
         PyiCloudService: Session-specific API handle.
@@ -197,8 +197,12 @@ if __name__ == '__main__':
     from dateutil.parser import parse
     from dotenv import load_dotenv
 
-    load_dotenv()
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+    )
 
+    load_dotenv()
     parser = argparse.ArgumentParser()
     parser.add_argument(
         'albums',
@@ -211,7 +215,10 @@ if __name__ == '__main__':
 
     api = login()
 
-    for i, album in enumerate(args.albums):
+    # Kludge: Sometimes the name of the file gets scooped up here.
+    albums = [a for a in args.albums if 'icloud.py' not in a]
+
+    for i, album in enumerate(albums):
         # Kludge: If the title is a month/year combo, use a simplified path.
         album_folder = album
         try:
