@@ -1,17 +1,21 @@
 """TODO: File description."""
 import json
+import logging
 from pathlib import Path
 from typing import Iterable, Tuple
 
 from docx import Document
 
+log = logging.getLogger(__name__)
 
-def get_headings(file_path: Path) -> Tuple[str, str]:
+
+def get_headings(file_path: str | Path) -> Tuple[str, str]:
     """TODO: Description."""
     from dateutil.parser import parse
 
     # Try to use the format from icloud.py first. If that doesn't work, just
     # come back with the original filename so we at least have something.
+    file_path = Path(file_path)
     try:
         parts = file_path.stem.split('_')
 
@@ -27,21 +31,24 @@ def get_headings(file_path: Path) -> Tuple[str, str]:
         return file_path.name, '[No timestamp.]'
 
 
-def zip_files(file_paths: Iterable[Path], out_path: Path) -> None:
+def zip_files(file_paths: Iterable[str | Path], out_path: str | Path) -> None:
     """TODO: Description."""
     from zipfile import ZipFile
 
-    with ZipFile(out_path.as_posix(), 'w') as zip:
-        for file in file_paths:
+    log.info('Zipping files into %s...' % out_path)
+    with ZipFile(Path(out_path).as_posix(), 'w') as zip:
+        for file in [Path(p) for p in file_paths]:
             if file.exists() and file.is_file():
                 zip.write(file, file.name)
+    log.info('Done!')
 
 
-def build_doc(data_path: Path, chunk_size: int = 5000) -> Path:
+def build_doc(data_path: str | Path, chunk_size: int = 5000) -> Path:
     """TODO: Description."""
     from natsort import natsorted
     from unidecode import unidecode
 
+    data_path = Path(data_path)
     out_path = data_path / 'megadoc'
     out_path.mkdir(parents=True, exist_ok=True)
 
@@ -66,9 +73,9 @@ def build_doc(data_path: Path, chunk_size: int = 5000) -> Path:
         )
         doc_file = out_path / filename
 
-        print(f"Building {doc_file}...")
+        log.info('Building %s...' % doc_file)
         for i, json_file in enumerate(json_files[start:end]):
-            print(f"  {json_file} ({i + start + 1}/{file_count})")
+            log.info('%s (%d/%d)' % (json_file, i + start + 1, file_count))
             with json_file.open() as f:
                 data = json.load(f)
 
@@ -104,22 +111,24 @@ def build_doc(data_path: Path, chunk_size: int = 5000) -> Path:
 
             doc.add_page_break()
 
-        print(f"Saving {doc_file}...")
+        log.info('Saving %s...' % doc_file)
         doc.save(doc_file.as_posix())
         chunk_files.append(doc_file)
 
-    print('Zipping files...')
     zip_files(chunk_files, out_path / f"{data_path.parent.name}_{data_path.name}.zip")
-
-    print('Done!')
+    log.info('Done!')
 
 
 if __name__ == '__main__':
     import argparse
     from dotenv import load_dotenv
 
-    load_dotenv()
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+    )
 
+    load_dotenv()
     parser = argparse.ArgumentParser()
     parser.add_argument(
         'paths',
@@ -130,7 +139,7 @@ if __name__ == '__main__':
     )
     args = parser.parse_args()
 
-    for path in [Path(p) for p in args.paths]:
+    # Kludge: Sometimes the name of the file gets scooped up in here.
+    paths = [p for p in args.paths if 'megadoc.py' not in p]
+    for path in [Path(p) for p in paths]:
         build_doc(path)
-    
-    print('Done!')
