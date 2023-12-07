@@ -203,9 +203,13 @@ def download_album(
                     f.write(chunk)
         dl_count += 1
 
-        # Azure can't work with HEIC so we'll need to convert before we do OCR.
-        if img_file.suffix.lower() == '.heic':
-            img_file = Path(heic_to_png(img_file, delete_old=True))
+        # Azure can't work with .HEIC so we'll need to convert before we do OCR.
+        # TODO: This has been moved to vision.py for case-by-case handling.
+        # Keeping the files in .HEIC format means they take up less space.
+        # It does make them slower to process, though, especially if we need to
+        # do it more than once.
+        # if img_file.suffix.lower() == '.heic':
+        #    img_file = Path(heic_to_png(img_file, delete_old=True))
 
         # Overwrite filesystem timestamp with iCloud's "created on" property,
         # just as another way to help sort them if necessary.

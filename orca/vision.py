@@ -55,6 +55,8 @@ def get_img_type(file_path: str | Path) -> str:
         return 'bmp'
     if ext == '.gif':
         return 'gif'
+    if ext == '.heic':
+        return 'heic'
     if ext == '.ico':
         return 'ico'
     if ext == '.jpg' or ext == '.jpeg':
@@ -90,9 +92,31 @@ def analyze_image(
     img_type = get_img_type(img_file)
     if not img_type:
         return
+
+    # .HEIC files need to be converted before they get sent to Azure. Doing this
+    # at download would save time if we ran this a lot, but .HEIC is a very
+    # efficient format, and leaving it behind would take up more disk space.
+    if img_type == 'heic':
+        import pyheif
+        from PIL import Image
+
+        log.debug('Converting %s to .PNG...' % img_file)
+        heif = pyheif.read(img_file.as_posix())
+        img = Image.frombytes(
+            heif.mode,
+            heif.size,
+            heif.data,
+            'raw',
+            heif.mode,
+            heif.stride,
+        )
+        img_file = img_file.with_suffix('.png')
+        img.save(img_file.as_posix())
+
     with img_file.open('rb') as f:
         image = f.read()
 
+    # Build request headers. See Azure Computer Vision docs for details.
     uri = os.environ['_ORCA_VISION_ENDPOINT'] + '/computervision/imageanalysis:analyze'
     params = {
         'api-version': os.environ['_ORCA_VISION_API_VERSION'],
@@ -118,6 +142,11 @@ def analyze_image(
                 time.sleep(retry_delay)
         else:
             break
+
+    # Delete converted version if we made one.
+    if img_type == 'heic':
+        log.debug('Deleting %s...' % img_file)
+        img_file.unlink()
 
     try:
         return response.json()

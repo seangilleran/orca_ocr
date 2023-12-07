@@ -89,13 +89,13 @@ def build_doc(data_path: str | Path, chunk_size: int = 5000) -> Path:
             # TODO: Break this out into separate function definition(s).
             # ... Computer Vision
             if 'readResult' in data:
-                try:
+                block_key = 'blocks' if 'blocks' in data['readResult'] else 'pages'
+                for block in data['readResult'][block_key]:
                     lines = []
-                    for line in data['readResult']['pages'][0]['lines']:
-                        lines.append(unidecode(line['content']))
+                    for line in block['lines']:
+                        text_key = 'text' if 'text' in line else 'content'
+                        lines.append(unidecode(line[text_key]))
                     doc.add_paragraph('\n'.join(lines))
-                except KeyError:
-                    doc.add_paragraph('[No text recovered.]')
 
             # ... Document Intelligence
             elif 'analyzeResult' in data:
